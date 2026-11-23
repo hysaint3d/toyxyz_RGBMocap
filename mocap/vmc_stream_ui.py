@@ -77,8 +77,6 @@ class VmcStreamWorkspace(PearVmcWorkspace):
             self.stream_status.setText('Select one person to stream.' if not self._stream_checked else 'No prepared motion for this person at the current frame.')
             return
         ident,name,rig,frames,frame,transform=sources[0]
-        if hasattr(self,'configure_stream_knees'):
-            self.configure_stream_knees(sender,(scope,ident,rig.key,id(frames),repr(transform)),((ident,frame),))
         if key!=self._vmc_frame_key or now-self._vmc_sent_at>=.25:
             try:
                 adapter_key=(scope,rig.key)

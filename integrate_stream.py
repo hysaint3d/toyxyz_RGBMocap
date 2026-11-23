@@ -5,11 +5,6 @@ MARKER='from .python_livelink_ui import PythonLiveLinkWorkspace'
 
 def integrate(text):
     if MARKER in text:
-        anchor="        self.python_livelink_controls.setVisible(self.stream_target.currentText() == 'Python Live Link (SaintMocap)')\n"
-        knee="        self.stream_knee_controls.setVisible(self.stream_target.currentText() in ('VMC','Python Live Link (SaintMocap)'))\n"
-        if knee not in text:
-            if text.count(anchor)!=1: raise ValueError('Unsupported Python Live Link controls')
-            text=text.replace(anchor,anchor+knee,1)
         return text
     ast.parse(text)
     if 'class StreamWorkspace(VmcStreamWorkspace):' in text:
@@ -32,7 +27,6 @@ def integrate(text):
 ''',
         'change_stream_target(self, index)':'''        self.python_livelink_stop()
         self.python_livelink_controls.setVisible(self.stream_target.currentText() == 'Python Live Link (SaintMocap)')
-        self.stream_knee_controls.setVisible(self.stream_target.currentText() in ('VMC','Python Live Link (SaintMocap)'))
         self.stream_people.show()
 ''',
         'close_stream(self)':'''        self.python_livelink_stop()

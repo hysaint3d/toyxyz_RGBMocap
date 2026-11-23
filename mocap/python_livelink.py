@@ -145,7 +145,6 @@ class PythonLiveLink(WireSender):
         self.stop_event=threading.Event(); self.lock=threading.Lock()
         self.latest=None; self.errors=''; self.clients={}; self.connected=False
         self.ready=False; self.frames=0; self.subjects=0; self._live=False
-        self.knee_options=(False,False,0,None); self.knee_states={}
         self.unicast_sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
         self.mcast_sock=None
         try:
@@ -174,16 +173,12 @@ class PythonLiveLink(WireSender):
             if not 0<len(rig.bones)<=256: raise ValueError('Too many bones')
             copied.append((actor,name,rig,frame,np.array(world,copy=True),
                            None if transform is None else np.array(transform,copy=True)))
-        with self.lock: self.latest=('offline',tuple(copied),time.monotonic(),self.knee_options)
-
-    def configure_knees(self,left,right,revision,identity):
-        with self.lock:
-            self.knee_options=(bool(left),bool(right),revision,identity)
+        with self.lock: self.latest=('offline',tuple(copied),time.monotonic())
 
     def submit_live(self,pose,parents=None,aligned=False):
         copied=None if pose is None else (dict(joints=np.array(pose['joints'][:55],copy=True),
             rotations=np.array(pose['rotations'],copy=True)),np.array(parents,copy=True),bool(aligned))
-        with self.lock: self.latest=('live',copied,time.monotonic(),self.knee_options)
+        with self.lock: self.latest=('live',copied,time.monotonic())
 
     def close(self):
         self.stop_event.set()  # Worker owns socket closure; never wait in Qt.
@@ -272,23 +267,11 @@ class PythonLiveLink(WireSender):
                     try:
                         poses=() if latest is None else (prepared_snapshot(latest[1]) if latest[0]=='offline'
                                   else live_snapshot(*latest[1]) if latest[1] is not None else ())
-                        if latest is not None:
-                            from .knee_lock import KneeLock
-                            locked=[]; used=set()
-                            for subject,key,names,parents,pose in poses:
-                                used.add(subject)
-                                state=self.knee_states.setdefault(subject,KneeLock(.01))
-                                left,right,revision,identity=latest[3]
-                                pose=state.poses(names,parents,pose,(left,right,revision,(identity,subject,key)))
-                                locked.append((subject,key,names,parents,pose))
-                            poses=tuple(locked)
-                            self.knee_states={k:v for k,v in self.knee_states.items() if k in used}
                         self.errors=''
                     except (ValueError,KeyError,TypeError,IndexError,OSError) as exc:
                         poses=(); self.errors=str(exc)
                     processed=latest
-                if latest is not None and now-latest[2]>(.75 if latest[0]=='live' else 1.5):
-                    poses=(); self.knee_states.clear()
+                if latest is not None and now-latest[2]>(.75 if latest[0]=='live' else 1.5): poses=()
                 if now-last_send>=1/30:
                     self._send_poses(poses,now); last_send=now
         except OSError as exc:

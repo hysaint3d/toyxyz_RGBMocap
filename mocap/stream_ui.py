@@ -97,7 +97,6 @@ class StreamWorkspace(PythonLiveLinkWorkspace, VmcStreamWorkspace):
     def change_stream_target(self, index):
         self.python_livelink_stop()
         self.python_livelink_controls.setVisible(self.stream_target.currentText() == 'Python Live Link (SaintMocap)')
-        self.stream_knee_controls.setVisible(self.stream_target.currentText() in ('VMC','Python Live Link (SaintMocap)'))
         self.stream_people.show()
         self.pear_vmc_stop()
         self.stream_vmc_controls.setVisible(index == 2)

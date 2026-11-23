@@ -17,8 +17,7 @@ from integrate_stream import integrate, MARKER
 HERE=Path(__file__).resolve().parent
 FILES=('mocap/python_livelink.py','mocap/python_livelink_wire.py',
        'mocap/python_livelink_rig.py','mocap/python_livelink_ui.py',
-       'mocap/knee_lock.py','mocap/pear_vmc.py','mocap/vmc_stream_ui.py',
-       'docs/PYTHON_LIVE_LINK.md','docs/KNEE_LOCK.md')
+       'docs/PYTHON_LIVE_LINK.md')
 
 def digest(text): return hashlib.sha256((text.rstrip('\n')+'\n').encode('utf8')).hexdigest()
 
@@ -28,18 +27,16 @@ def plan(root):
     current=stream.read_text(encoding='utf8')
     before={name:(root/name).read_bytes() if (root/name).exists() else None for name in FILES}
     payload={name:(HERE/name).read_bytes() for name in FILES}
-    updated=integrate(current)
-    if all(before[name]==payload[name] for name in FILES) and current==updated: return {},{}
+    if MARKER in current:
+        if all(before[name]==payload[name] for name in FILES): return {},{}
+        raise ValueError('A different Python Live Link revision is installed; no files changed.')
     allowed=json.loads((HERE/'stream_baselines.json').read_text(encoding='utf8'))
     if digest(current) not in allowed:
         raise ValueError('Unreviewed Stream source version; no files changed.')
-    previous=json.loads((HERE/'upgrade_baselines.json').read_text(encoding='utf8'))
     for name in FILES:
         if before[name] is not None and before[name]!=payload[name]:
-            try: known=digest(before[name].decode('utf8').replace('\r\n','\n')) in previous.get(name,())
-            except UnicodeError: known=False
-            if not known: raise ValueError('Existing file differs: '+name)
-    payload['mocap/stream_ui.py']=updated.encode('utf8')
+            raise ValueError('Existing file differs: '+name)
+    payload['mocap/stream_ui.py']=integrate(current).encode('utf8')
     before['mocap/stream_ui.py']=stream.read_bytes()
     for name,data in payload.items():
         if name.endswith('.py'): ast.parse(data,filename=name)
