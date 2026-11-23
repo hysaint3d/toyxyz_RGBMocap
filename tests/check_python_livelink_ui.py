@@ -12,6 +12,12 @@ faulthandler.dump_traceback_later(15,exit=True)
 os.environ['QT_QPA_PLATFORM']='offscreen'
 _dll_handle=os.add_dll_directory(sys.argv[1]) if len(sys.argv)>1 and hasattr(os,'add_dll_directory') else None
 ROOT=Path(__file__).parents[1]; sys.path.insert(0,str(ROOT))
+if os.environ.get('RGBMOCAP_TEST_APP'):
+    import importlib.util
+    app_root=Path(os.environ['RGBMOCAP_TEST_APP'])
+    spec=importlib.util.spec_from_file_location('test_runtime_registry',app_root/'mocap/runtime_registry.py')
+    registry=importlib.util.module_from_spec(spec);spec.loader.exec_module(registry)
+    registry.activate(app_root,'gui')
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication,QWidget,QTabWidget,QVBoxLayout,QComboBox
 
@@ -24,6 +30,7 @@ class FakeSender:
     def submit_live(self,*args): self.poses.append(args)
     def close(self): self.stopped=True
     def error(self): return None
+    def configure_knees(self,*options): self.knee_options=options
 
 transport=types.ModuleType('mocap.python_livelink')
 transport.TARGET='Python Live Link (SaintMocap)'; transport.PROVIDER='RGB MoCap Python (SaintMocap)'
@@ -59,6 +66,10 @@ ui.stream_people.item(0).setCheckState(Qt.Checked); ui.python_livelink_button.cl
 sender=ui.python_livelink_sender
 assert sender is not None and not ui.python_livelink_ip.isEnabled()
 assert sender.poses[-1][0][4]=='frame0'
+ui.stream_left_knee.setChecked(True)
+assert sender.knee_options[0] and not sender.knee_options[1]
+revision=sender.knee_options[2];ui.stream_knee_reset.click()
+assert sender.knee_options[2]>revision
 ui.motion_view.index=1; ui.update_stream(); assert sender.poses[-1][0][4]=='frame1'
 ui.stream_people.item(1).setCheckState(Qt.Checked); assert len(sender.poses[-1])==2
 before=sender.poses[-1][0][0]
@@ -74,4 +85,5 @@ ui.stream_target.setCurrentText(transport.TARGET); ui.python_livelink_button.cli
 sender=ui.python_livelink_sender; ui.close_stream()
 assert sender.stopped and ui.python_livelink_sender is None
 ui.stream_target.setCurrentText('None'); ui._stream_timer.stop(); ui.close()
-print('PASS: real Qt controls, source selection, playhead, project identity, PEAR routing, mode switching, stop/close; fake transports only.')
+faulthandler.cancel_dump_traceback_later()
+print('PASS: real Qt controls, knee options/re-anchor, source selection, playhead, project identity, PEAR routing, mode switching, stop/close; fake transports only.')

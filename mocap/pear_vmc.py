@@ -146,6 +146,7 @@ class Sender:
         self.condition = threading.Condition(); self.pending = None
         self.closed = False; self.error = ''; self.frames = 0
         self.started = time.monotonic(); self.last_pose = 0.; self.tracking = False
+        self.knees=None; self.knee_options=(False,False,0,None)
         self.thread = threading.Thread(target=self._run, name='pear-vmc', daemon=True)
         self.thread.start()
 
@@ -158,7 +159,7 @@ class Sender:
         with self.condition:
             if self.closed:
                 return
-            self.pending = (value,)
+            self.pending = (value,self.knee_options)
             self.condition.notify()
 
     def close(self):
@@ -166,21 +167,26 @@ class Sender:
             self.closed = True; self.pending = None; self.condition.notify()
         # Worker owns and closes the socket. No blocking join in Qt callbacks.
 
+    def configure_knees(self,left,right,revision,identity):
+        with self.condition:
+            self.knee_options=(bool(left),bool(right),revision,identity)
+
     def submit_offline(self, adapter, world, transform=None):
         value = (adapter, np.array(world, copy=True),
                  None if transform is None else np.array(transform, copy=True), time.monotonic())
         with self.condition:
             if self.closed:
                 return
-            self.pending = (value,)
+            self.pending = (value,self.knee_options)
             self.condition.notify()
 
     def _send(self, packets):
         for packet in packets:
             self.socket.sendto(packet, self.target)
 
-    def _unavailable(self):
+    def _unavailable(self,reset_knees=True):
         self.tracking = False
+        if reset_knees and self.knees is not None: self.knees.reset()
         self._send(bundles([message('/VMC/Ext/OK', 0),
                             message('/VMC/Ext/T', time.monotonic()-self.started)]))
 
@@ -204,9 +210,15 @@ class Sender:
                             if time.monotonic()-submitted > .75:
                                 self._unavailable(); continue
                             elapsed = time.monotonic()-self.started
-                            packets = (frame_packets(pose, parents, aligned, elapsed)
-                                       if isinstance(pose,dict) else
-                                       transform_packets(pose.transforms(parents,aligned),elapsed))
+                            bones=(transforms(pose,parents,aligned) if isinstance(pose,dict)
+                                   else pose.transforms(parents,aligned))
+                            options=pending[1]
+                            if options[0] or options[1]:
+                                from .knee_lock import KneeLock,vmc_parents
+                                if self.knees is None: self.knees=KneeLock()
+                                bones=self.knees.bones(bones,vmc_parents([b[0] for b in bones]),options)
+                            elif self.knees is not None: self.knees.reset()
+                            packets=transform_packets(bones,elapsed)
                             self._send(packets)
                             self.frames += 1; self.last_pose = time.monotonic()
                             self.tracking = True; self.error = ''
@@ -215,7 +227,7 @@ class Sender:
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     self.error = str(exc)
                     try:
-                        self._unavailable()
+                        self._unavailable(reset_knees=False)
                     except OSError:
                         pass
         except OSError as exc:

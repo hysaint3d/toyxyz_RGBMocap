@@ -1,5 +1,8 @@
 # Python Live Link (SaintMocap) �X experimental
 
+Manual kneeling contact controls are available for this target and VMC. See
+[Knee Lock](KNEE_LOCK.md) for capture, release and foot-contact limitations.
+
 An independent Stream target derived from Hysaint's SaintMocap Operator V5
 Python Live Link sender. It implements UE UDP Messaging v17 / Live Link v2
 without a C++ compiler, Unreal commandlet or cbor2 package on the sender.
@@ -68,8 +71,8 @@ Use `--dry-run` to validate without writing. The installer accepts only the
 reviewed Stream source baselines, preserves existing target indices, takes a
 source backup under local_patches, holds the app session lock and rolls back
 file writes on failure. It does not update packages, models or projects.
-The current C: development workspace could not see E:, so no application
-installation was performed there.
+The current patch has not been installed into the user's application by the
+coding environment. Installation requires write access to the selected folder.
 
 ## Validation
 
@@ -79,13 +82,13 @@ discovery/connect replies and segmented skeleton/frame/clear messages. Packet
 replay is not proof of Unreal interoperability. Real localhost UDP tests are
 included and skip explicitly when an independent loopback probe fails.
 
-The included Qt lifecycle check is intended to run real Qt widgets with fake
-transports (no models). In this restricted environment, QApplication startup
-timed out, so its assertions have not been executed. It covers target controls,
-multi-person selection, playhead/project changes, PEAR routing, target changes
-and stop/close when run on a working desktop. Existing VMC numerical tests pass;
-its existing real UDP test also fails the environment's loopback restriction.
-No GUI/GPU/model/camera/full-application or Unreal actor-rendering test is claimed.
+With the application's runtime available again, the Qt lifecycle check passed
+using real widgets and fake transports. It covers knee options/re-anchor, target
+controls, multi-person selection, playhead/project changes, PEAR routing and
+stop/close. Numerical, packet replay, installer and real localhost UDP tests
+also pass, including locked knee positions transmitted by both senders.
+This supersedes the earlier environment's loopback/Qt limitations. No GPU/model,
+camera/full-application or Unreal actor-rendering test is claimed.
 
 Original RGB MoCap conversion code retains its MIT license. Existing third-party
 notices and model terms continue to apply. Protocol API references:
