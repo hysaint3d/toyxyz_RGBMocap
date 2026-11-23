@@ -17,7 +17,9 @@ def stream_rig(asset):
 from .vmc_stream_ui import VmcStreamWorkspace
 
 
-class StreamWorkspace(VmcStreamWorkspace):
+from .python_livelink_ui import PythonLiveLinkWorkspace
+
+class StreamWorkspace(PythonLiveLinkWorkspace, VmcStreamWorkspace):
     def build_stream_page(self):
         page = QWidget()
         column = QVBoxLayout(page)
@@ -25,6 +27,7 @@ class StreamWorkspace(VmcStreamWorkspace):
         column.addWidget(QLabel('Target'))
         self.stream_target = QComboBox()
         self.stream_target.addItems(['None', 'Blender', 'VMC'])
+        self.stream_target.addItem('Python Live Link (SaintMocap)')
         self.stream_target.setAccessibleName('Stream target')
         column.addWidget(self.stream_target)
         self.stream_port_controls = QWidget()
@@ -51,6 +54,7 @@ class StreamWorkspace(VmcStreamWorkspace):
         column.addWidget(self.stream_port_controls)
         self.stream_port_controls.hide()
         self.build_vmc_stream(column)
+        self.build_python_livelink(column)
         self.stream_people = QListWidget()
         self.stream_people.setObjectName('streamPeopleList')
         self.stream_people.setAccessibleName('People to stream')
@@ -76,6 +80,10 @@ class StreamWorkspace(VmcStreamWorkspace):
         return page
 
     def stream_tab_changed(self, index):
+        if self.stream_target.currentText() == 'Python Live Link (SaintMocap)':
+            self.update_stream()
+            self._stream_timer.start(33 if self.python_livelink_sender is not None else 250)
+            return
         if self.stream_target.currentText() == 'VMC':
             self.update_stream()
             self._stream_timer.start(33 if self.pear_vmc_sender is not None else 250)
@@ -87,6 +95,9 @@ class StreamWorkspace(VmcStreamWorkspace):
             self._stream_timer.stop()
 
     def change_stream_target(self, index):
+        self.python_livelink_stop()
+        self.python_livelink_controls.setVisible(self.stream_target.currentText() == 'Python Live Link (SaintMocap)')
+        self.stream_people.show()
         self.pear_vmc_stop()
         self.stream_vmc_controls.setVisible(index == 2)
         self.stream_people.show()
@@ -126,6 +137,7 @@ class StreamWorkspace(VmcStreamWorkspace):
         self.stream_tab_changed(self.people_tabs.currentIndex())
 
     def close_stream(self):
+        self.python_livelink_stop()
         self.pear_vmc_stop()
         if self._stream_sender is not None:
             self._stream_sender.close()
@@ -253,6 +265,9 @@ class StreamWorkspace(VmcStreamWorkspace):
             sender.changed.set()
 
     def update_stream(self):
+        if self.stream_target.currentText() == 'Python Live Link (SaintMocap)':
+            self.update_python_livelink()
+            return
         if self.stream_target.currentText() == 'VMC':
             self.update_vmc_stream()
             return
@@ -310,7 +325,7 @@ class StreamWorkspace(VmcStreamWorkspace):
             elif not self._stream_checked:
                 status = 'Connected. Check people to stream.'
             else:
-                status = f'Connected · {len(sources)} people at this frame'
+                status = f'Connected �P {len(sources)} people at this frame'
         status = self._stream_port_error or status
         if self.stream_status.text() != status:
             self.stream_status.setText(status)
