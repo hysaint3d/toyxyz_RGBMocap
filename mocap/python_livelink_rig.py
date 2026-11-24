@@ -50,7 +50,7 @@ def local_transforms(world, parents):
 def rig_schema(rig):
     bones = rig.bones
     if not 0 < len(bones) <= 256:
-        raise ValueError('Live Link supports 1�V256 bones per person.')
+        raise ValueError('Live Link supports 1–256 bones per person.')
     names = [b[0] for b in bones]
     parents = [int(b[1]) for b in bones]
     if (len({n.casefold() for n in names}) != len(names) or any(not n or len(n.encode('utf-16-le')) > 240 for n in names)

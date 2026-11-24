@@ -310,7 +310,7 @@ class StreamWorkspace(VmcStreamWorkspace):
             elif not self._stream_checked:
                 status = 'Connected. Check people to stream.'
             else:
-                status = f'Connected �P {len(sources)} people at this frame'
+                status = f'Connected · {len(sources)} people at this frame'
         status = self._stream_port_error or status
         if self.stream_status.text() != status:
             self.stream_status.setText(status)

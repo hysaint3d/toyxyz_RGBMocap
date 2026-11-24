@@ -1,4 +1,4 @@
-# Python Live Link (SaintMocap) �X experimental
+# Python Live Link (SaintMocap) — experimental
 
 An independent Stream target derived from Hysaint's SaintMocap Operator V5
 Python Live Link sender. It implements UE UDP Messaging v17 / Live Link v2
@@ -27,9 +27,8 @@ upstream Unreal Live Link options are not renamed or replaced.
 PEAR uses accepted preview body/finger packets through the existing VMC hooks.
 Choose this target after entering PEAR, start the output and start live tracking
 separately. Tracking loss clears the subject after 0.75 seconds. Stopping
-tracking or leaving PEAR stops the sender. An unpatched upstream PEAR module
-without those hooks will not stream live poses; install over the VMC fork for
-this workflow. No recording, inference or facial capture is started by streaming.
+tracking or leaving PEAR stops the sender. The integrated feature branch includes these hooks. A standalone Python-only
+patch on an unmodified upstream installation does not add PEAR live hooks. No recording, inference or facial capture is started by streaming.
 
 ## Skeleton and transport contract
 
@@ -68,8 +67,10 @@ Use `--dry-run` to validate without writing. The installer accepts only the
 reviewed Stream source baselines, preserves existing target indices, takes a
 source backup under local_patches, holds the app session lock and rolls back
 file writes on failure. It does not update packages, models or projects.
-The current C: development workspace could not see E:, so no application
-installation was performed there.
+A Git checkout of this feature branch already includes the modules and PEAR hooks.
+The guarded patch installer is only for the separately reviewed Stream baselines.
+This integration was tested in an isolated source checkout; the E: installation,
+models, projects and inference runtimes were not modified.
 
 ## Validation
 
@@ -79,13 +80,24 @@ discovery/connect replies and segmented skeleton/frame/clear messages. Packet
 replay is not proof of Unreal interoperability. Real localhost UDP tests are
 included and skip explicitly when an independent loopback probe fails.
 
-The included Qt lifecycle check is intended to run real Qt widgets with fake
-transports (no models). In this restricted environment, QApplication startup
-timed out, so its assertions have not been executed. It covers target controls,
-multi-person selection, playhead/project changes, PEAR routing, target changes
-and stop/close when run on a working desktop. Existing VMC numerical tests pass;
-its existing real UDP test also fails the environment's loopback restriction.
-No GUI/GPU/model/camera/full-application or Unreal actor-rendering test is claimed.
+On 2026-11-25 the integrated source passed 32 tests: six PEAR/VMC, five VMC
+rig, seven Python sender, three installer, seven official Unreal stream and four
+reference-export checks. Localhost UDP tests ran successfully without skips.
+The real Qt lifecycle harness passed with fake transports: offline selection,
+playhead/project identity, live PEAR routing, all target modes and sender cleanup.
+Full MainWindow import and mixin resolution passed using the existing GUI runtime.
+Untouched upstream Stream methods (including face sampling, reference export,
+Blender port rollback and baking) match the reviewed main source AST exactly.
+These are source/transport checks; physical cameras, GPU inference, actual UE
+receivers, character rendering and Blender baking were not tested in this merge.
+
+## Integrated Stream targets
+
+The feature branch merges official main `cdf4d98a` and keeps its target indices:
+None (0), Blender (1), official Unreal Live Link (2), then VMC (3) and
+Python Live Link (SaintMocap) (4). Official Unreal keeps prepared body/face
+streaming and reference FBX export. Live PEAR uses VMC or the Python sender.
+The streaming knee-lock experiment remains reverted.
 
 Original RGB MoCap conversion code retains its MIT license. Existing third-party
 notices and model terms continue to apply. Protocol API references:

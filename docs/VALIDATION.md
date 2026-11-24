@@ -1,5 +1,309 @@
 # Source package validation
 
+## CLI camera rotation refinement
+
+- Ran animated Blender exports with refinement on and off for 72-frame
+  moving-camera FlowHMR and ExMR takes. FlowHMR accepted five of twelve
+  samples. ExMR rejected all twelve samples and kept the saved camera.
+  Comparing every exported frame in Blender 4.5 showed changed FlowHMR
+  camera rotation, camera-center differences below 2e-7 m, and identical
+  body transforms. The ExMR camera and body transforms matched exactly.
+- Both six-frame FlowHMR preview MP4s rendered with the camera visible.
+  The refined preview waited for the CPU worker and reported the same
+  five accepted samples. A fresh static-camera reconstruction saved
+  the preference, its Blender export skipped refinement, and saving the
+  preference off retained the original camera file hash.
+- Reproduced the Windows progress-file sharing error by holding the file
+  open during replacement. The worker emitted the update on stdout and
+  resumed writing progress files when the reader released the file.
+
+## Windows CLI multi-video integration matrix (2026-11-24)
+
+- Tested 48–72 frame excerpts of dance, exercise, a short video, a
+  two-person clip and a synchronized two-camera pair on an RTX 5090.
+  The CLI used normal result publication and export entry points.
+- ExMR ran fixed and moving camera with different smoothing and contact
+  settings. FlowHMR ran fixed camera and 5-frame moving camera sampling
+  with HaMeR and Low Memory. CLI argument choices now match the FlowHMR
+  worker. Invalid cadence and the unsupported GVHMR moving camera option
+  were rejected with exit code 2 before creating a project.
+- GEM-X published both raw and corrected SOMA motion. PromptHMR ran a
+  two-person interaction in fixed camera and a single person in moving
+  camera with DROID. Both manual MAMMA calibration and automatic VGGT
+  camera and GeoCalib gravity estimation ran on the same camera pair.
+- GVHMR accepted explicit fixed camera and ran with the three refinements
+  disabled and enabled. ExMR was re-corrected on a project copy using a
+  different preset and a manual floor, then exported to BVH.
+- Blender 4.5 opened 12 FBXs, two BVHs and four Blender files. Sampled
+  finite bone transforms and confirmed changing poses, including a skinned
+  Quinn, the two-person PromptHMR bundle and a two-camera MAMMA scene.
+  The standalone Blender receiver streamed each offline model and baked
+  seven actors in total. Reopening each baked scene preserved its actions.
+- Unreal Engine 5.8.4 received 52 body bones and 52 facial curves from the
+  new ExMR reconstruction. The neutral face frame and CSV export also
+  succeeded. Windows regression tests recorded 81 passes and one skip.
+- PEAR tracked seven consecutive samples both with and without smoothing,
+  and reported four samples from a synchronized pair. The normal Camera
+  Align workers created a calibration from the pair. The CLI loaded it
+  and fused both views for all four requested frames.
+
+## Windows multi-model CLI and integration
+
+- Ran offline GPU reconstruction for FlowHMR, GVHMR, PromptHMR, GEM-X and
+  MAMMA with the installed workers. FlowHMR completed static and moving
+  camera runs, including HaMeR. GVHMR completed the base run and a run with
+  HTD, FootMR and HandFlow enabled. PromptHMR used fixed camera. GEM-X
+  used native SOMA output. MAMMA used two synchronized videos and a saved
+  camera calibration. The automatic MAMMA alignment test could not run
+  with the linked runtimes in the isolated checkout.
+- Confirmed SAM 3.1 tracking of two people for all 48 frames and RIFE
+  interpolation of a 24 fps clip to 30 fps. A version 1
+  batch planned and ran contact correction followed by BVH export. Also
+  verified manual contact edits and reset, a project copy, Generic and
+  Mannequin FBX export, a Blender bundle, a combined PromptHMR bundle,
+  a native MAMMA Blender scene, Live Link reference FBX, and retargeting
+  to both FBX and VMD. Rendered preview MP4 with the real Qt/OpenGL viewport,
+  including a project reconstructed with MAMMA.
+- Tracked faces for all 48 test frames, set and reset the neutral frame,
+  and exported Live Link Face CSV. A Blender protocol client received
+  the live rig, poses and a requested bake. An installed Unreal Engine
+  5.8.4 editor with RGB MoCap Connect received 52 body bones and 52 facial
+  curves. This check verified reception in Unreal.
+- Verified PEAR GPU tracking with single and dual video inputs. Dual
+  input delivered samples for consecutive requested frames and reported
+  both views available with no alignment. Windows camera enumeration ran.
+  Camera capture and aligned PEAR fusion were outside these integration
+  checks.
+- In a separate model store, imported a pinned FlowHMR configuration,
+  previewed and confirmed removal, re-imported it, and exercised cached
+  and official downloads. The installed model store was preserved.
+- The Windows regression suite ran 81 tests, with 80 passing and one
+  symbolic-link test skipped on this Windows account.
+
+## ExMR command line and desktop parity
+
+- Windows with the private runtimes, actual GPU inference, and a 48-frame clip
+  using a Unicode filename with spaces. Single-person ExMR completed from the
+  CLI and independently from the desktop. The working video, tracking file,
+  and camera array matched byte for byte and the keypoints were identical.
+  The maximum difference across raw global body pose elements was below
+  9e-7 in this test.
+- The desktop opened the CLI project and re-corrected it. The CLI also
+  re-corrected and exported the desktop project. Dry run preserved the
+  project manifest and a duplicate export request preserved the existing
+  file. Two-person reconstruction exported two independent FBXs with and
+  without motion correction.
+- Blender 4.5 imported all 48 animation frames of the Generic, Manny and
+  Quinn FBX exports. The existing FlowHMR desktop workflow also completed
+  GPU reconstruction and preview preparation in the same checkout.
+
+## Unreal Live Link sender on UE 5.8 (2026-11-23)
+
+- With the previous `BuildSettingsVersion.V6` and 5.7 include order,
+  `Setup_UnrealStream.cmd --engine` against installed UE 5.8.4 stopped before
+  compiling: UnrealBuildTool rejects an editor target that changes
+  `UnreachableCodeWarningLevel`, `ReturnTypeWarningLevel` and
+  `DanglingWarningLevel`, because it shares build products with UnrealEditor.
+- With `Latest` for both settings, setup built the provider and passed its
+  startup verification on installed UE 5.8.4 and on UE 5.7.4, using Visual
+  Studio 2022 (MSVC 14.44) on Windows with an RTX 4080.
+- The RGB MoCap Connect receiver also compiled from source against UE 5.8.4
+  without warnings. Both modules loaded in an existing project's editor and
+  Tools > RGB MoCap Connect opened. End-to-end streaming into that UE 5.8
+  editor was not part of this check.
+
+## Unified Model Manager (2026-11-20)
+
+- In an isolated Windows app, verified every workflow tab and the Installed
+  Models filters. Confirmed shared deletion from both FlowHMR and ExMR,
+  including the affected workflows, estimated space and exact file paths.
+  Enter on the default Cancel button, Escape and closing the prompt all
+  preserved the selected files.
+- The Windows GUI and its normal workers downloaded and re-downloaded pinned
+  FlowHMR files. Download All also downloaded OSNet from Google Drive.
+  Deleting a shared SAM configuration changed both workflows to Missing.
+  Importing the correct file restored Ready. Invalid replacement files
+  were rejected.
+- Re-imported the official SMPL-H file after deletion, recreated the two
+  runtime hardlinks and read the model through a recreated link. Verified
+  export model preflight and preservation of the external source and an
+  unrelated installed file.
+- The Windows regression suite passed 27 tests. Its symbolic-link test
+  required privileges unavailable on that Windows run and passed in WSL,
+  together with the other seven model management tests. The WSL tests covered
+  interrupted removal, active PEAR bundle cleanup and external file protection.
+
+## RGB MoCap Connect 0.5.0
+
+See the [Unreal receiver validation](../unreal_plugin/RGBMoCapMetaHuman/VALIDATION.md#050-mannequin-and-mixed-targets)
+for Manny and Quinn, mixed MetaHuman face streaming and the UE 5.7.4 Win64 ZIP.
+
+## UE5 Mannequin bind pose and foot spacing (2026-11-20)
+
+- Reimported rig-only and skinned FBXs for a 120-frame sample in Blender.
+  The bind transforms of all 88 bones and the evaluated poses across the
+  clip matched between both exports.
+- The Unreal Engine 5.7 Legacy importer loaded the animation on the stock
+  `SK_Mannequin`. Sampled bone positions matched between the rig-only and skinned
+  exports.
+- Added a regression test for scaled horizontal ankle spacing. All 20 tests
+  in the source regression suite passed.
+
+## UE5 Mannequin FBX with optional mesh (2026-11-20)
+
+- The app export worker wrote with the bundled Blender 4.5 runtime. The export
+  passed with an invalid Unreal path and an empty Unreal data directory.
+- Reimport in Blender verified skinned vertices and mesh deformation. Unreal
+  Engine 5.7.4 Legacy and Interchange imported both mannequin FBXs in a clean
+  project and created a Skeletal Mesh, Skeleton and Animation Sequence each
+  time. Manny retained 1,018 samples with root travel. Quinn retained 294
+  samples in In Place mode with no planar root travel.
+- The maximum local bind-position and bind-rotation differences from the
+  stock reference were below 0.0011 cm and 0.0029 degrees. Evaluated bone
+  poses agreed with the corresponding animation-only imports at the sampled
+  frames. The automated suite passed all 19 tests.
+
+## Reference export selection feedback (2026-11-19)
+
+- Reproduced a checked-but-not-current QListWidget row: export returned before
+  opening the save dialog and only wrote a status-line hint. A sole listed
+  person is now selected automatically; multiple people still require an
+  explicit current row. Prerequisite/errors are reported in a message box and
+  status/log text, without depending on a connected provider.
+- An offscreen Qt check observed an actual non-native QFileDialog opening and
+  cancelling with a sole checked person and no current row. Selection/checkbox
+  state was retained and no job was enqueued. Modal feedback passed for an
+  unavailable frame, busy job, PEAR, ambiguous selection and invalid rig.
+- A saved Native77 project exported through the actual main-window handler,
+  CPU worker and Blender writer (about 0.99 s on this PC); preview arrays, time,
+  sender and checkboxes remained unchanged. The save-path choice was supplied
+  by the test; Windows shell/native-dialog automation was not part of this check.
+  Existing Blender/Unreal UI regressions and all 14 unit tests passed.
+
+## Unreal streaming release review and portable sample (2026-11-19)
+
+The sample project ZIP has been retired. For the current receiver download
+and setup, see [MetaHuman Connect](UNREAL_LIVE_LINK.md#recommended-metahuman-connection).
+
+- Two completed Astra reviews assessed the sender, reference export, lifecycle,
+  protocol and release evidence (37,030 total API tokens). The final review
+  accepted the source fixes with no demonstrated remaining release blocker,
+  conditional on the archive/extraction checks completed below. This supersedes
+  the earlier blocked Astra attempt recorded in the initial streaming checks.
+- Fixed the reference FBX display skin: rebuild and bind the visualization in
+  the imported armature's actual rest space instead of retaining an incompatible
+  intermediate bind. Re-exported 52- and 77-bone GUI references and imported both
+  through normal UE 5.7.4 legacy and Interchange importers. Named hierarchy,
+  local rest transforms and active bone counts passed; maximum position error
+  was 0.0000455 cm and rotation error 0.002955 degrees. The previously scattered
+  display vertices now remain within the expected limb-sized bounds.
+- Aligned Python name/label limits with Unreal's UTF-16 string units, including
+  astral Unicode boundary tests. All 14 unit tests passed, including reference
+  validation/atomic publication and the existing empty-foot-contact regression.
+  UI regression checks covered Blender packets, occupied ports, target switching,
+  paused/seek poses, absent motion, selection before connection and PEAR exclusion.
+- Startup cancellation and two rapid close/restart cases reaped owned provider
+  processes and threads. A native receiver checked 195 evaluations across
+  Native77/52/Native77 schema replacements and reconnect: maximum position error
+  was 0.00000954 cm and normalized quaternion angle error 0.00000418 degrees.
+  This verifies transport/schema replacement, not automatic target IK-rig swaps.
+- The content-only sample passed ordinary Simulate game-world playback using
+  the actual app sender and stock Message Bus source. The hidden source and
+  342-bone MetaHuman body matched reference results at frames 0/80/180 and after
+  continuous playback; key-joint position error was below 0.00002 cm. Body/face
+  head alignment, changing motion and sender restart followed by stock-source
+  recreation passed. No forced skeletal updates or custom receiver module was
+  used. Concurrent local providers were isolated only in the test transport.
+- The separate sample ZIP contained 315 payload files plus its hash manifest
+  (316 entries), 965,438,961 uncompressed bytes and 863,390,994 archive bytes.
+  CRC and every payload SHA-256 passed. It excluded caches, build binaries,
+  private test modules, model weights and source video/motion. Local DNA import
+  provenance was cleared from the staged copies without changing runtime DNA;
+  the public asset metadata audit found no private paths or local Subject ID.
+- Extracted the ZIP into a different path containing spaces. A normal UE 5.7.4
+  Editor loaded the map, compiled Animation Blueprints and 295 dependencies
+  without missing assets, junctions or a custom module. The extracted copy also
+  passed the real Simulate/live/reconnect checks after the documented actual
+  Subject configuration. Restoring the distributed default Subject None left
+  every payload hash unchanged. The released ZIP included the English README
+  and Epic asset notices.
+- Archive SHA-256:
+  `6d787818d4b13ab4d5bd49395ff29e1cf2f5fa4336585f410deed0652d1e11c1`.
+
+The sample uses one specific 52-bone reference and its MetaHuman setup. Other
+references need matching source assets; Native77 requires its own IK setup.
+Remote networking, other engine versions, packaged games, fresh-PC compiler
+installation, long sessions and arbitrary-character retarget quality remain
+outside these checks. Reconnection uses Unreal's stock source recreation; it
+does not promise transparent rebinding after the provider process restarts.
+
+## Live Link reference source FBX (2026-11-19)
+
+- Added **Export Reference FBX...** to the Unreal Stream target. It captures the
+  highlighted person's current ready take/reference, independently of the stream
+  checkbox or connection, and exports through a shared CPU worker and the
+  existing Blender 4.5 runtime. No AI inference or receiver tool/plugin is added.
+- Actual main GUI exports passed for saved FlowHMR 52-bone and GEM-X Native77
+  projects. Success preserved the same preview arrays, time, stream sender and
+  checkbox selection. Worker export times were about 0.77 / 0.80 s on this PC;
+  these exclude file-dialog interaction and are not universal timings.
+- Imported the actual GUI-produced FBX files in a separate UE 5.7.4 project via
+  both FbxFactory and Interchange. All 52 / 77 bones were active and preserved,
+  with the same named parent hierarchy and no added leaf/container bones.
+  Maximum local-reference position difference: 0.0000455 cm; rotation:
+  0.002955 degrees; scale difference from 1: below 8.4e-7.
+  Unreal's bone index ordering can differ; comparison matches names/parents.
+- Added failure/atomic-publication checks: invalid hierarchy/quaternions and
+  nonfinite data are rejected, writer failure retains an existing target, and
+  publication happens only after the final file is complete. An actual GUI
+  cancellation retained the previous target and cleared its request/staging.
+- Normal window closure revealed an omitted stream shutdown path. Added
+  stream timer/transport closure to shutdown_preview; repeated actual exports
+  then closed the app and its owned Unreal provider successfully.
+- Kept inference fingerprint worker.py unchanged. The only new worker routing
+  is the presentation dispatcher; reference export does not replace/reload the
+  current scene. No new MetaHuman retarget/cloth-quality claim is made here.
+- Source guide describes standard Unreal source/target IK Rig and Retarget Pose
+  From Mesh setup, different 52/77 chains, unit/facing conventions and limits.
+  No target meshes, proprietary character assets or test FBX payloads are shipped
+  in the source checkout; the separate sample Release has its own asset notices.
+
+## Unreal Live Link body streaming (2026-11-19)
+
+- Built the optional app-authored provider with the installed UE 5.7.4 and
+  Visual Studio 2022 tools. Setup now verifies token-authenticated local startup
+  before retaining its receipt and removes owned compiler intermediates.
+- A separate native receiver used Unreal's stock Message Bus Source. In a
+  90-second app-provider run with two 52-bone FlowHMR people, recorded 1,214
+  evaluations across motion/reference subjects, including paused poses, seeking
+  to frames 0/80/180, person deselection/return, no-motion gaps, and source
+  removal/recreation. Both people returned after their subjects were removed.
+- Compared received hierarchy, reference transforms, all bone lengths and
+  sampled motion against the previously verified pilot. Maximum parent-local
+  translation difference was 0.0000229 cm; normalized quaternion dot error was
+  below 1.5e-15. This establishes transport/conversion equivalence, not general
+  retarget quality on arbitrary rigs.
+- Ran five automated numerical/protocol checks: random rotation/parent-local
+  reconstruction, scene placement and leaf lengths, invalid rig/transform
+  rejection, schema cache release and bounded/finite JSON.
+- UI checks exercised actual Blender rig/pose packets, occupied-port rollback,
+  target-switch cleanup, checked people before Unreal connects, seeking,
+  unavailable motion removal and PEAR suspension. The actual main GUI loaded
+  a saved two-person project, checked both people, started the provider and
+  reaped it on target None/window shutdown.
+- Warm provider startup: 2.77 s; measured provider peak working RAM: 859 MiB.
+  Six-second steady CPU average: 0.77% of one core. Two-person conversion over
+  100 calls: median 0.64 ms, p95 0.93 ms. These exclude receiving editor/render
+  costs and are observations on this PC, not hardware minimums.
+- No new inference, export format or model/runtime dependency was introduced.
+  Additionally received 198 native evaluations while the same person switched
+  between GEM-X Native77 and a 52-bone FlowHMR rig, checking new hierarchy,
+  reference transforms and terminal lengths after each replacement.
+  Remote machines, packaged Unreal games,
+  other engine versions and clean-PC compiler installation remain unverified.
+- Astra submission was blocked by automatic approval review before execution;
+  this validation is based on direct code, numerical and native runtime checks.
+
 ## Unreal Live Link Face CSV export (2026-11-16)
 
 - Exported an FBX and a 199-frame facial CSV from the Windows app using a saved
@@ -1353,7 +1657,7 @@ dtype/device fallback is retained. In 360 parameter samples, batched results
 matched the preceding filter exactly, including face axis-angle conversions.
 Median CPU filter time fell from 0.243 to 0.104 ms (p95 0.114 ms). On real CUDA
 pose/face tensors, filtering plus transfers fell from 0.648 to 0.256 ms median
-(p95 0.851 to 0.399 ms); rebuilt joints and vertices were bit-identical. This is
+(p95 0.931 to 0.399 ms); rebuilt joints and vertices were bit-identical. This is
 filter/transfer overhead, not the whole model's inference time.
 
 Paired worker runs on one real video measured smoothed random-seek processing at

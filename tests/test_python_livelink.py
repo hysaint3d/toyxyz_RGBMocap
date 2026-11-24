@@ -67,9 +67,9 @@ class Peer(WireSender):
 class LiveLinkTests(unittest.TestCase):
     def test_cbor_formats_and_unicode_fstrings(self):
         for fmt in (1,4):
-            body={'PollRequest':guid_to_cbor(uuid.uuid4().bytes,fmt),'name':'����','test':[1,-3,2.5,True,None]}
+            body={'PollRequest':guid_to_cbor(uuid.uuid4().bytes,fmt),'name':'角色','test':[1,-3,2.5,True,None]}
             self.assertEqual(decode_cbor(serialize_cbor_custom(body,fmt),fmt),body)
-        for name in ('Actor','�����','test??'):
+        for name in ('Actor','角色甲','test😀'):
             raw=pack_fstring(name); self.assertEqual(unpack_fstring(raw,0),(name,len(raw)))
         for raw in (b'\x9f',b'\x1a\xff',b'\x81'*10):
             with self.assertRaises(ValueError): decode_cbor(raw)
@@ -79,8 +79,8 @@ class LiveLinkTests(unittest.TestCase):
             rig,world=rig_fixture(count); scene=np.eye(4)
             scene[:3,:3]=axis_rotation(1,.6); scene[:3,3]=[2.,.2,-3.]
             before=world.copy()
-            subject,key,names,parents,poses=prepared_snapshot((('a'*64,'����',rig,0,world,scene),))[0]
-            self.assertEqual(len(names),count); self.assertIn('����',subject)
+            subject,key,names,parents,poses=prepared_snapshot((('a'*64,'角色',rig,0,world,scene),))[0]
+            self.assertEqual(len(names),count); self.assertIn('角色',subject)
             points=[]; rots=[]
             for parent,pose in zip(parents,poses):
                 p=np.array(pose[:3]); r=rotation(pose[3:])
@@ -179,7 +179,7 @@ class LiveLinkTests(unittest.TestCase):
             sender._receive(bytes(packet),peer.sock.getsockname())
             self.assertEqual(len(sender.clients),1)
             rig,world=rig_fixture(77)
-            poses=prepared_snapshot((('a'*64,'�����',rig,0,world,None),))
+            poses=prepared_snapshot((('a'*64,'角色甲',rig,0,world,None),))
             sender._send_poses(poses,time.monotonic())
             groups={}
             for raw in sender.unicast_sock.packets:
@@ -192,7 +192,7 @@ class LiveLinkTests(unittest.TestCase):
                 name,_,fmt,ann,body=envelope(payload); messages[name]=(ann,decode_cbor(body,fmt))
             self.assertEqual(len(messages['LiveLinkSkeletonStaticData'][1]['BoneNames']),77)
             self.assertEqual(len(messages['LiveLinkAnimationFrameData'][1]['Transforms']),77)
-            self.assertIn('�����',messages['LiveLinkAnimationFrameData'][0]['SubjectName'])
+            self.assertIn('角色甲',messages['LiveLinkAnimationFrameData'][0]['SubjectName'])
             sender.unicast_sock.packets.clear(); sender._send_poses((),time.monotonic())
             raw=sender.unicast_sock.packets[-1]
             name,_,fmt,_,body=envelope(parse_data_chunk(raw,34)[0]['Payload'])
@@ -206,7 +206,11 @@ class LiveLinkTests(unittest.TestCase):
         text=(ROOT/'mocap/stream_ui.py').read_text(encoding='utf8')
         self.assertEqual(integrate(text),text)
         ast.parse(text)
-        self.assertIn("['None', 'Blender', 'VMC']",text)
+        self.assertIn("['None', 'Blender', 'Unreal Live Link',",text)
+        self.assertIn("'VMC', 'Python Live Link (SaintMocap)'",text)
+        self.assertIn('UnrealStream(ROOT)',text)
+        self.assertIn('Export Reference FBX...',text)
+        self.assertIn('sender.publish(actors, faces=faces)',text)
         upstream=ROOT/'_upstream_stream.py'
         if upstream.exists():
             text=integrate(upstream.read_text(encoding='utf8'))

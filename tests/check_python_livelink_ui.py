@@ -20,7 +20,7 @@ class FakeSender:
         self.ready=True; self.connected=True; self.frames=0; self.subjects=0
         self.port=12345; self.stopped=False; self.poses=[]
         self.thread=types.SimpleNamespace(is_alive=lambda:False)
-    def publish(self,poses): self.poses.append(poses)
+    def publish(self,poses,*args,**kwargs): self.poses.append(poses)
     def submit_live(self,*args): self.poses.append(args)
     def close(self): self.stopped=True
     def error(self): return None
@@ -30,13 +30,22 @@ transport.TARGET='Python Live Link (SaintMocap)'; transport.PROVIDER='RGB MoCap 
 transport.PythonLiveLink=FakeSender
 sys.modules['mocap.python_livelink']=transport
 bone=types.ModuleType('mocap.bone_stream')
-bone.BoneStream=FakeSender; bone.PORT=49168; bone.MAX_ACTORS=128; bone.MAX_BAKE_FRAMES=36000
+import numpy as np
+bone.Y_TO_Z=np.array(((1.,0.,0.),(0.,0.,-1.),(0.,1.,0.)))
+from queue import Queue
+class BlenderSender(FakeSender):
+    def __init__(self,*args):
+        super().__init__(*args); self.commands=Queue()
+bone.BoneStream=BlenderSender; bone.PORT=49168; bone.MAX_ACTORS=128; bone.MAX_BAKE_FRAMES=36000
 sys.modules['mocap.bone_stream']=bone
+from mocap import stream_ui
+class OfficialSender(FakeSender): pass
+stream_ui.UnrealStream=OfficialSender
 from mocap.stream_ui import StreamWorkspace
 
 class Harness(StreamWorkspace,QWidget):
     def __init__(self):
-        super().__init__(); self._pear_active=False; self.people_state=None
+        super().__init__(); self.busy=False; self._pear_active=False; self.people_state=None
         self.people_root=None; self.project=Path('first'); self._single_actor={'name':'Actor'}
         self.model_choice=QComboBox(); self.model_choice.addItem('ExMR','exmr')
         self.motion_view=types.SimpleNamespace(target_frames=None,target_asset=None,index=0,
@@ -45,6 +54,8 @@ class Harness(StreamWorkspace,QWidget):
         layout.addWidget(self.people_tabs); self.people_tabs.addTab(QWidget(),'People')
         self.people_tabs.addTab(self.build_stream_page(),'Stream')
         self.people_tabs.currentChanged.connect(self.stream_tab_changed)
+    def face_project(self): return None
+    def face_playback_archive(self,root): return None
     def stream_people_with_motion(self): return ((1,'Actor'),(2,'Actor 2'))
     def stream_sources_at_playhead(self,rows):
         return iter((i,name,types.SimpleNamespace(key='rig'),['frame0','frame1'],self.motion_view.index,None)
@@ -52,7 +63,7 @@ class Harness(StreamWorkspace,QWidget):
 
 app=QApplication([]); ui=Harness()
 ui.stream_target.setCurrentText(transport.TARGET); ui.people_tabs.setCurrentIndex(1)
-assert ui.stream_target.count()==4
+assert ui.stream_target.count()==5
 assert not ui.python_livelink_controls.isHidden()
 assert ui.stream_vmc_controls.isHidden() and ui.stream_port_controls.isHidden()
 ui.stream_people.item(0).setCheckState(Qt.Checked); ui.python_livelink_button.click()
@@ -73,5 +84,18 @@ assert ui.python_livelink_controls.isHidden() and not ui.stream_vmc_controls.isH
 ui.stream_target.setCurrentText(transport.TARGET); ui.python_livelink_button.click()
 sender=ui.python_livelink_sender; ui.close_stream()
 assert sender.stopped and ui.python_livelink_sender is None
+ui.stream_target.setCurrentText('Unreal Live Link')
+official=ui._stream_sender
+assert isinstance(official,OfficialSender) and not ui.stream_unreal_controls.isHidden()
+assert ui.python_livelink_controls.isHidden() and ui.stream_vmc_controls.isHidden()
+ui.stream_people.item(0).setCheckState(Qt.Checked)
+assert official.poses[-1]
+ui.stream_target.setCurrentText('Blender')
+assert official.stopped and ui._stream_sender is not None
+blender=ui._stream_sender
+ui.stream_target.setCurrentText('VMC')
+assert blender.stopped and ui._stream_sender is None
+ui._pear_active=True; ui.stream_target.setCurrentText('Unreal Live Link')
+assert ui._stream_sender is None and 'Live PEAR output' in ui.stream_status.text()
 ui.stream_target.setCurrentText('None'); ui._stream_timer.stop(); ui.close()
 print('PASS: real Qt controls, source selection, playhead, project identity, PEAR routing, mode switching, stop/close; fake transports only.')

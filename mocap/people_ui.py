@@ -10,7 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QSize, QRect, Signal, QPersistentModelIndex, QEvent
 from PySide6.QtGui import QColor, QIcon, QPixmap, QPainter, QPen
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
-    QListWidget,QListWidgetItem,QColorDialog,QComboBox,QFileDialog,QTabWidget,
+    QListWidget,QListWidgetItem,QColorDialog,QComboBox,QFileDialog,QTabWidget,QCheckBox,
     QStyledItemDelegate,QStyleOptionViewItem,QToolTip,QStyle,QMenu,QInputDialog,QMessageBox)
 
 from .people_store import load_people,save_people,root_for,safe_child,DEFAULT_COLOR
@@ -199,19 +199,8 @@ class PeopleWorkspace:
 
     def apply_scene_correction(self,kind):
         """Rebuild all available actor/take corrections against one plane."""
-        from .motion_tools import RESULTS,result_sources,base_result,result_is_current
-        jobs=[]
-        skipped=[]
-        bases=result_sources(base_result(kind))
-        for person in self.people_state['people']:
-            for number,take in enumerate(person.get('takes',[]),1):
-                project=safe_child(self.people_root,take['project'])
-                available=all((project/RESULTS[base][0]).is_file() and result_is_current(project,base) for base in bases)
-                if not available:
-                    if person.get('checked'):
-                        skipped.append(f"{person['name']}, Take {number}")
-                    continue
-                jobs.extend((stage,['--project',str(project),'--result',kind]) for stage in ('correct','export'))
+        from .workflow_jobs import scene_correction_jobs
+        jobs, skipped = scene_correction_jobs(self.people_root, self.people_state['people'], kind)
         for name in skipped:
             self.log.append(f'{name}: Apply Correction skipped this take because its base motion is unavailable. Reconstruct it first.')
         if not jobs:
@@ -313,16 +302,40 @@ class PeopleWorkspace:
         self._sam31_prompt = 'person'
         bar.addWidget(self.find_person_button)
         bar.addWidget(self.people_tracker)
+        self.rife_interpolation = QCheckBox('RIFE Frame Interpolation')
+        self.rife_interpolation.setToolTip('Use RIFE 4.9 to bring video below 30 fps to 30 fps before offline reconstruction. Download the optional weights in Model Manager. The original video is preserved.')
+        bar.addWidget(self.rife_interpolation)
         bar.addStretch()
         movie_layout.addWidget(footer)
         layout.addWidget(movie,1)
         return body
+
+    def rife_input_rates(self):
+        if self.model_choice.currentData() == 'mamma':
+            return [entry['metadata']['fps'] for entry in self.mamma_inputs]
+        return [getattr(self, '_rife_source_fps', 0)]
+
+    def selected_interpolation(self):
+        from .rife_video import RECIPE, recipe
+        return RECIPE if any(recipe(self.rife_interpolation.isChecked(), fps) for fps in self.rife_input_rates()) else ''
+
+    def ready_for_interpolation(self, interpolation):
+        from .models import BY_KEY, ready
+        from .rife_video import MODEL_KEY
+        if not interpolation or ready(BY_KEY[MODEL_KEY]):
+            return True
+        self.status.setText('Download RIFE 4.9 in Model Manager, or turn off RIFE Frame Interpolation.')
+        self.open_model_manager()
+        return False
 
     def update_people_readiness(self):
         enabled = not self.busy and not self.contact_saving
         from .sam31_runtime import SUPPORTED
         self.people_tracker.setVisible(self.model_choice.currentData() in SUPPORTED)
         self.people_tracker.setEnabled(enabled)
+        from .rife_video import recipe
+        self.rife_interpolation.setEnabled(enabled and self.video_readable
+                                           and any(recipe(True, fps) for fps in self.rife_input_rates()))
         self.find_person_button.setEnabled(enabled and self.video_readable)
         self.people_list.setEnabled(enabled)
         self.person_takes.setEnabled(enabled)
@@ -533,7 +546,7 @@ class PeopleWorkspace:
             path=safe_child(self.people_root,relative)
         if self.project!=path:
             source_time=self.source_offset+(self.slider.value()/self.info['fps'] if self.info else 0)
-            self.load_project(path)
+            self.load_project(path, keep_current_options=True)
             self.motion_view.auto_fit=False
             if self.info:
                 self.slider.setValue(max(0,min(self.slider.maximum(),round((source_time-self.source_offset)*self.info['fps']))))
@@ -647,7 +660,8 @@ class PeopleWorkspace:
             root_end=min(float(manifest['end']),root_start+manifest['frames']/manifest['fps'])
             # Cached discovery belongs to the group's complete input, not to a
             # newly trimmed preview or a shorter selected person's take.
-            if abs(first-root_start)<1e-6 and abs(end-root_end)<1e-6:
+            if (manifest.get('interpolation', '') == self.selected_interpolation()
+                    and abs(first-root_start)<1e-6 and abs(end-root_end)<1e-6):
                 self.start_jobs([('people',['--project',str(self.people_root)])])
                 return
         self.input_jobs(['people'])
@@ -682,13 +696,14 @@ class PeopleWorkspace:
             self.status.setText('Seek to a frame inside the trim before marking people.')
             return
         self._sam31_prompt = prompt
-        options = ['--sam31-options', json.dumps(dict(prompt=prompt, time=mark_time, points=points),
-                                                 ensure_ascii=True)]
+        from .workflow_jobs import sam31_arguments
+        options = sam31_arguments(prompt, mark_time, points)
         if self.people_root is not None:
             manifest = json.loads((self.people_root/'project.json').read_text(encoding='utf-8'))
             root_start = float(manifest['start'])
             root_end = min(float(manifest['end']), root_start + manifest['frames'] / manifest['fps'])
-            if abs(first-root_start) < 1e-6 and abs(end-root_end) < 1e-6:
+            if (manifest.get('interpolation', '') == self.selected_interpolation()
+                    and abs(first-root_start) < 1e-6 and abs(end-root_end) < 1e-6):
                 self.start_jobs([('sam31_people', ['--project', str(self.people_root), *options])])
                 return
         self.input_jobs(['sam31_people'], people_options=options)
@@ -706,43 +721,30 @@ class PeopleWorkspace:
             self.status.setText('Prepare the required motion models first.');self.open_model_manager();return True
         root_manifest=json.loads((self.people_root/'project.json').read_text(encoding='utf-8'))
         first,end=self.processing_range()
-        fps=root_manifest['fps']
-        begin=round((first-root_manifest['start'])*fps)
-        finish=round((end-root_manifest['start'])*fps)
         self._people_stages=[s for s in stages if s!='track']
         self._people_batch=True
         self._people_inference_jobs=[];self._people_post_jobs=[]
         self._people_return_id=self.active_person_id if any(p['id']==self.active_person_id for p in selected) else selected[0]['id']
         self._people_return_project=None
         self._people_result=result or self.active_result
-        options=self.selected_correction_options()
-        jobs=[]
-        for person in selected:
-            args=['--project',str(self.people_root),'--person-id',str(person['id']),
-                '--first-frame',str(begin),'--end-frame',str(finish),'--result',self._people_result,
-                '--correction-preset',options['preset'],'--correction-mode',options['mode'],'--foot-lock',str(int(options['foot_lock'])),'--hand-lock',str(int(options['hand_lock'])),'--pelvis-offset',str(options['pelvis_offset'])]
-            if not options['auto_floor']:args+=['--floor',str(options['floor'])]
-            jobs.append(('person',args))
-        self.start_jobs(jobs)
+        from .workflow_jobs import person_jobs
+        self.start_jobs(person_jobs(self.people_root, [person['id'] for person in selected], first, end,
+                                    root_manifest, self._people_result, self.selected_correction_options()))
         return True
 
     def people_event(self,event):
         if event['type']=='person_prepared':
             # Explicit project arguments prevent a later UI selection from changing
             # which person's worker, contact edits, or exports are being processed.
-            inference=[stage for stage in self._people_stages if stage not in ('correct','export','flow_export')]
-            post=[stage for stage in self._people_stages if stage in ('correct','export','flow_export')]
-            jobs=[(stage,['--project',path,'--result',self._people_result])
-                  for path in event['projects'] for stage in inference]
-            deferred=[(stage,['--project',path,'--result',self._people_result])
-                      for path in event['projects'] for stage in post]
+            from .workflow_jobs import grouped_take_jobs, take_jobs
+            jobs, deferred = take_jobs(event['projects'], self._people_stages, self._people_result)
             # Prepare every actor's original camera/motion before resolving the
             # one automatic scene plane or committing any corrected exports.
             self._people_inference_jobs.extend(jobs)
             self._people_post_jobs.extend(deferred)
             if not any(stage=='person' for stage,_ in self.jobs):
-                from .queue_groups import grouped_jobs
-                self.jobs=grouped_jobs(self._people_inference_jobs,self.people_root)+self.jobs+self._people_post_jobs
+                self.jobs = grouped_take_jobs(self.people_root, self._people_inference_jobs,
+                                              self.jobs, self._people_post_jobs)
                 self._people_inference_jobs=[];self._people_post_jobs=[]
             return True
         if event['type']=='people_found':
@@ -755,7 +757,7 @@ class PeopleWorkspace:
         found=getattr(self,'_people_found_root',None)
         if found is not None:
             self._people_found_root=None
-            self.load_project(found)
+            self.load_project(found, keep_current_options=True)
             self.status.setText(f'{self.people_list.count()} people found. Check people to extract; select a row to preview.')
         if not self._people_batch:return
         self._people_batch=False
